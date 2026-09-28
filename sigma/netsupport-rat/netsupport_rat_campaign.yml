@@ -2,9 +2,8 @@ title: WScript or CScript Creating LNK Files in Startup Folder
 id: 41dcb72c-855e-4969-81c6-dd4b40aaaa17
 status: experimental
 description: |
-  Detects wscript.exe or cscript.exe writing shortcut (.lnk) files into a user's Startup folder.
-  Observed in a phishing campaign delivering a large obfuscated JavaScript dropper that installs
-  NetSupport RAT and persists via randomly named .lnk files (T1547.001).
+  Detects wscript.exe or cscript.exe creating shortcut (.lnk) files in a user's Startup folder.
+  The analyzed NetSupport RAT campaign used shortcut files and Startup-folder persistence.
 author: secoft
 date: 2026-09-28
 tags:
@@ -27,65 +26,12 @@ falsepositives:
   - Legitimate logon or deployment scripts that create Startup shortcuts; tune for the environment.
 level: high
 ---
-title: NetSupport Client Executed from Unusual Path
-id: 78f10af5-5d8b-47f6-9f41-a598a576ab00
-status: experimental
-description: |
-  Detects client32.exe, the default NetSupport Manager client name, running from user-writable or
-  ProgramData paths instead of a typical installation location. Attackers may rename the binary,
-  so this rule should be treated as a starting point rather than complete coverage.
-author: secoft
-date: 2026-09-28
-tags:
-  - attack.command_and_control
-  - attack.t1219
-logsource:
-  category: process_creation
-  product: windows
-detection:
-  selection_img:
-    Image|endswith: '\client32.exe'
-  selection_path:
-    Image|contains:
-      - '\ProgramData\'
-      - '\AppData\'
-      - '\Temp\'
-  condition: selection_img and selection_path
-falsepositives:
-  - Legitimate NetSupport deployments installed outside Program Files; verify against asset inventory.
-level: high
----
-title: Proxy Request to Known NetSupport Campaign C2 URI
-id: da1254aa-6112-45ce-8a4b-13b4b3747934
-status: experimental
-description: |
-  IOC-based detection for HTTP requests to the observed NetSupport RAT campaign C2 endpoint
-  85.239.149.75/fakeurl.htm. Low durability: infrastructure can change quickly; use primarily
-  for retro-hunting and incident scoping.
-author: secoft
-date: 2026-09-28
-tags:
-  - attack.command_and_control
-  - attack.t1071.001
-logsource:
-  category: proxy
-detection:
-  selection_ip:
-    c-uri|contains: '85.239.149.75'
-  selection_uri:
-    cs-uri-stem|endswith: '/fakeurl.htm'
-  condition: selection_ip and selection_uri
-falsepositives:
-  - Unlikely for the exact IP and URI combination.
-level: high
----
 title: WScript or CScript Spawning Command Shell
 id: 9d81de13-7cc4-4627-82ab-182548c7a9cb
 status: experimental
 description: |
-  Detects wscript.exe or cscript.exe spawning cmd.exe. This behavior was observed during execution
-  of the JavaScript dropper used in the NetSupport RAT phishing campaign and can be used as one
-  stage of the wscript -> cmd -> client32 process-chain hunt.
+  Detects wscript.exe or cscript.exe spawning cmd.exe. This parent-child relationship was observed
+  in the execution chain of the JavaScript dropper used to deploy NetSupport RAT.
 author: secoft
 date: 2026-09-28
 tags:
@@ -107,34 +53,52 @@ falsepositives:
   - Administrative or deployment scripts that intentionally launch cmd.exe through Windows Script Host.
 level: medium
 ---
-title: NetSupport Client Spawned by Command Shell from Writable Path
-id: 29aef087-9f30-4f78-94d0-4a4ee8b942cb
+title: NetSupport Components Executed from ProgramData
+id: 78f10af5-5d8b-47f6-9f41-a598a576ab00
 status: experimental
 description: |
-  Detects client32.exe being launched by cmd.exe from ProgramData, AppData, or Temp. Combined with
-  the companion WScript/CScript-to-cmd rule, this provides portable behavioral coverage for the
-  observed wscript -> cmd -> client32 execution chain without requiring backend-specific correlation.
+  Detects NetSupport-related executables observed in this campaign running from ProgramData.
+  The analyzed sample dropped nt32.exe and remcmdstub.exe under a ProgramData subdirectory.
 author: secoft
 date: 2026-09-28
 tags:
-  - attack.execution
   - attack.command_and_control
-  - attack.t1059.003
-  - attack.t1219
+  - attack.t1219.002
 logsource:
   category: process_creation
   product: windows
 detection:
   selection_image:
-    Image|endswith: '\client32.exe'
-  selection_parent:
-    ParentImage|endswith: '\cmd.exe'
+    Image|endswith:
+      - '\nt32.exe'
+      - '\remcmdstub.exe'
   selection_path:
-    Image|contains:
-      - '\ProgramData\'
-      - '\AppData\'
-      - '\Temp\'
-  condition: selection_image and selection_parent and selection_path
+    Image|contains: '\ProgramData\'
+  condition: selection_image and selection_path
 falsepositives:
-  - Legitimate scripted NetSupport deployments using cmd.exe from non-standard installation paths.
+  - Legitimate NetSupport deployments using ProgramData; verify against asset inventory and expected installation paths.
+level: medium
+---
+title: Proxy Request to Known NetSupport Campaign C2 Endpoint
+id: da1254aa-6112-45ce-8a4b-13b4b3747934
+status: experimental
+description: |
+  IOC-based detection for HTTP requests to the observed NetSupport RAT campaign C2 endpoint
+  85.239.149.75/fakeurl.htm. Infrastructure can change quickly; use primarily for retro-hunting
+  and incident scoping. Proxy field names may require mapping for the target SIEM.
+author: secoft
+date: 2026-09-28
+tags:
+  - attack.command_and_control
+  - attack.t1071.001
+logsource:
+  category: proxy
+detection:
+  selection_ip:
+    c-uri|contains: '85.239.149.75'
+  selection_uri:
+    cs-uri-stem|endswith: '/fakeurl.htm'
+  condition: selection_ip and selection_uri
+falsepositives:
+  - Unlikely for the exact IP and URI combination.
 level: high
